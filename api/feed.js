@@ -1,8 +1,9 @@
 export default async function handler(req, res) {
   const storeHash = process.env.BIGCOMMERCE_STORE_HASH;
   const accessToken = process.env.BIGCOMMERCE_ACCESS_TOKEN;
+  const storefrontDomain = process.env.STOREFRONT_DOMAIN;
 
-  if (!storeHash || !accessToken) {
+  if (!storeHash || !accessToken || !storefrontDomain) {
     return res.status(500).send("Missing environment variables");
   }
 
@@ -12,19 +13,21 @@ export default async function handler(req, res) {
 
     while (true) {
       const response = await fetch(
-        `https://api.bigcommerce.com/stores/${storeHash}/v3/catalog/products?limit=250&page=${page}&include=custom_fields`,
+        `https://api.bigcommerce.com/stores/${storeHash}/v3/catalog/products?limit=250&page=${page}&include=custom_fields,images`,
         {
           headers: {
             "X-Auth-Token": accessToken,
             "Accept": "application/json",
-            "Content-Type": "application/json"
-          }
+            "Content-Type": "application/json",
+          },
         }
       );
 
       if (!response.ok) {
         const errorText = await response.text();
-        return res.status(response.status).send(`BigCommerce API error: ${errorText}`);
+        return res
+          .status(response.status)
+          .send(`BigCommerce API error: ${errorText}`);
       }
 
       const json = await response.json();
@@ -36,12 +39,12 @@ export default async function handler(req, res) {
       page++;
     }
 
-    const filtered = allProducts.filter(product =>
+    const filtered = allProducts.filter((product) =>
       Array.isArray(product.custom_fields) &&
       product.custom_fields.some(
-        field =>
-          String(field.name).toLowerCase() === "channable" &&
-          String(field.value).toLowerCase() === "yes"
+        (field) =>
+          String(field.name).trim().toLowerCase() === "channable" &&
+          String(field.value).trim().toLowerCase() === "yes"
       )
     );
 
@@ -50,34 +53,93 @@ export default async function handler(req, res) {
       return `"${str.replace(/"/g, '""')}"`;
     };
 
+    const stripHtml = (html) => {
+      if (!html) return "";
+      return String(html)
+        .replace(/<[^>]*>/g, " ")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/\s+/g, " ")
+        .trim();
+    };
+
+    const buildProductUrl = (product) => {
+      const path = product.custom_url?.url || "";
+      if (!path) return "";
+      return `https://${storefrontDomain}${path}`;
+    };
+
+    const buildImageUrl = (product) => {
+      if (Array.isArray(product.images) && product.images.length > 0) {
+        return (
+          product.images[0].url_standard ||
+          product.images[0].url_zoom ||
+          product.images[0].url_thumbnail ||
+          ""
+        );
+      }
+      return "";
+    };
+
+    const normalizeAvailability = (product) => {
+      if (product.inventory_level > 0) return "in stock";
+      return "out of stock";
+    };
+
     let csv = [
       [
         "id",
         "title",
         "description",
-        "price",
         "link",
         "image_link",
-        "brand",
         "availability",
+        "price",
+        "brand",
         "condition",
-        "sku"
-      ].join(",")
+        "gtin",
+        "mpn",
+        "item_group_id",
+        "google_product_category",
+        "product_type",
+        "sale_price",
+      ].join(","),
     ];
 
-    filtered.forEach(product => {
+    filtered.forEach((product) => {
+      const customFieldMap = {};
+      if (Array.isArray(product.custom_fields)) {
+        for (const field of product.custom_fields) {
+          customFieldMap[String(field.name).trim().toLowerCase()] = String(
+            field.value || ""
+          ).trim();
+        }
+      }
+
       const row = [
-        product.id,
-        escapeCsv(product.name),
-        escapeCsv(product.description),
-        product.price ?? "",
-        escapeCsv(product.custom_url?.url ? `https://${process.env.STOREFRONT_DOMAIN}${product.custom_url.url}` : ""),
-        escapeCsv(product.primary_image?.url_standard || ""),
-        escapeCsv(product.brand_name || ""),
-        escapeCsv(product.availability || ""),
+        escapeCsv(product.id),
+        escapeCsv(product.name || ""),
+        escapeCsv(stripHtml(product.description || "")),
+        escapeCsv(buildProductUrl(product)),
+        escapeCsv(buildImageUrl(product)),
+        escapeCsv(normalizeAvailability(product)),
+        escapeCsv(
+          product.price != null ? `${Number(product.price).toFixed(2)} EUR` : ""
+        ),
+        escapeCsv(product.brand_name || customFieldMap.brand || ""),
         escapeCsv("new"),
-        escapeCsv(product.sku || "")
+        escapeCsv(customFieldMap.gtin || product.upc || ""),
+        escapeCsv(customFieldMap.mpn || product.sku || ""),
+        escapeCsv(product.sku || ""),
+        escapeCsv(customFieldMap.google_product_category || ""),
+        escapeCsv(customFieldMap.product_type || ""),
+        escapeCsv(
+          product.sale_price != null && Number(product.sale_price) > 0
+            ? `${Number(product.sale_price).toFixed(2)} EUR`
+            : ""
+        ),
       ];
+
       csv.push(row.join(","));
     });
 
@@ -88,4 +150,3 @@ export default async function handler(req, res) {
     res.status(500).send(`Server error: ${error.message}`);
   }
 }
-// deploy trigger
