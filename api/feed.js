@@ -39,15 +39,6 @@ export default async function handler(req, res) {
       page++;
     }
 
-    const filtered = allProducts.filter((product) =>
-      Array.isArray(product.custom_fields) &&
-      product.custom_fields.some(
-        (field) =>
-          String(field.name).trim().toLowerCase() === "channable" &&
-          String(field.value).trim().toLowerCase() === "yes"
-      )
-    );
-
     const escapeCsv = (value) => {
       const str = value == null ? "" : String(value);
       return `"${str.replace(/"/g, '""')}"`;
@@ -59,8 +50,23 @@ export default async function handler(req, res) {
         .replace(/<[^>]*>/g, " ")
         .replace(/&nbsp;/g, " ")
         .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
         .replace(/\s+/g, " ")
         .trim();
+    };
+
+    const normalizeCustomFields = (customFields) => {
+      const map = {};
+      if (!Array.isArray(customFields)) return map;
+
+      for (const field of customFields) {
+        const key = String(field.name || "").trim().toLowerCase();
+        const value = String(field.value || "").trim();
+        map[key] = value;
+      }
+
+      return map;
     };
 
     const buildProductUrl = (product) => {
@@ -82,9 +88,14 @@ export default async function handler(req, res) {
     };
 
     const normalizeAvailability = (product) => {
-      if (product.inventory_level > 0) return "in stock";
+      if (Number(product.inventory_level || 0) > 0) return "in stock";
       return "out of stock";
     };
+
+    const filtered = allProducts.filter((product) => {
+      const customFieldMap = normalizeCustomFields(product.custom_fields);
+      return String(customFieldMap.channable || "").toLowerCase() === "yes";
+    });
 
     let csv = [
       [
@@ -95,6 +106,7 @@ export default async function handler(req, res) {
         "image_link",
         "availability",
         "price",
+        "sale_price",
         "brand",
         "condition",
         "gtin",
@@ -102,19 +114,24 @@ export default async function handler(req, res) {
         "item_group_id",
         "google_product_category",
         "product_type",
-        "sale_price",
       ].join(","),
     ];
 
     filtered.forEach((product) => {
-      const customFieldMap = {};
-      if (Array.isArray(product.custom_fields)) {
-        for (const field of product.custom_fields) {
-          customFieldMap[String(field.name).trim().toLowerCase()] = String(
-            field.value || ""
-          ).trim();
-        }
-      }
+      const customFieldMap = normalizeCustomFields(product.custom_fields);
+
+      const brand = product.brand_name || customFieldMap.brand || "";
+      const gtin = customFieldMap.gtin || product.upc || "";
+      const mpn = customFieldMap.mpn || product.sku || "";
+      const googleProductCategory =
+        customFieldMap.google_product_category || "";
+      const productType = customFieldMap.product_type || "";
+      const price =
+        product.price != null ? `${Number(product.price).toFixed(2)} EUR` : "";
+      const salePrice =
+        product.sale_price != null && Number(product.sale_price) > 0
+          ? `${Number(product.sale_price).toFixed(2)} EUR`
+          : "";
 
       const row = [
         escapeCsv(product.id),
@@ -123,21 +140,15 @@ export default async function handler(req, res) {
         escapeCsv(buildProductUrl(product)),
         escapeCsv(buildImageUrl(product)),
         escapeCsv(normalizeAvailability(product)),
-        escapeCsv(
-          product.price != null ? `${Number(product.price).toFixed(2)} EUR` : ""
-        ),
-        escapeCsv(product.brand_name || customFieldMap.brand || ""),
+        escapeCsv(price),
+        escapeCsv(salePrice),
+        escapeCsv(brand),
         escapeCsv("new"),
-        escapeCsv(customFieldMap.gtin || product.upc || ""),
-        escapeCsv(customFieldMap.mpn || product.sku || ""),
+        escapeCsv(gtin),
+        escapeCsv(mpn),
         escapeCsv(product.sku || ""),
-        escapeCsv(customFieldMap.google_product_category || ""),
-        escapeCsv(customFieldMap.product_type || ""),
-        escapeCsv(
-          product.sale_price != null && Number(product.sale_price) > 0
-            ? `${Number(product.sale_price).toFixed(2)} EUR`
-            : ""
-        ),
+        escapeCsv(googleProductCategory),
+        escapeCsv(productType),
       ];
 
       csv.push(row.join(","));
