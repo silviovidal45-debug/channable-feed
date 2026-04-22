@@ -119,21 +119,17 @@ export default async function handler(req, res) {
         return "";
       }
 
-      const images = product.images;
-
+      // Bevorzuge bewusst das 2. Bild
       const preferredImage =
-        images.find((img) => img.url_standard && !img.is_thumbnail) ||
-        images.find((img) => img.url_zoom && !img.is_thumbnail) ||
-        images.find((img) => img.url_standard) ||
-        images.find((img) => img.url_zoom) ||
-        images.find((img) => img.url_thumbnail);
-
-      if (!preferredImage) return "";
+        product.images[1] ||
+        product.images.find((img) => img.url_zoom) ||
+        product.images.find((img) => img.url_standard) ||
+        product.images[0];
 
       return (
-        preferredImage.url_standard ||
-        preferredImage.url_zoom ||
-        preferredImage.url_thumbnail ||
+        preferredImage?.url_zoom ||
+        preferredImage?.url_standard ||
+        preferredImage?.url_thumbnail ||
         ""
       );
     };
@@ -183,17 +179,17 @@ export default async function handler(req, res) {
         customFieldMap.google_product_category || "";
       const productType = customFieldMap.product_type || "";
 
-      let price = "";
+      // DEINE gewünschte Logik:
+      // Wenn sale_price existiert, dann kommt der reduzierte Preis ins Feld "price"
+      // und sale_price bleibt leer, damit Channable den aktuellen Preis sauber zeigt.
+      let finalPrice = "";
       let salePrice = "";
 
       if (product.sale_price != null && Number(product.sale_price) > 0) {
-        price =
-          product.price != null
-            ? `${Number(product.price).toFixed(2)} EUR`
-            : "";
-        salePrice = `${Number(product.sale_price).toFixed(2)} EUR`;
+        finalPrice = `${Number(product.sale_price).toFixed(2)} EUR`;
+        salePrice = "";
       } else {
-        price =
+        finalPrice =
           product.price != null
             ? `${Number(product.price).toFixed(2)} EUR`
             : "";
@@ -207,7 +203,7 @@ export default async function handler(req, res) {
         escapeCsv(buildProductUrl(product)),
         escapeCsv(buildImageUrl(product)),
         escapeCsv(normalizeAvailability(product)),
-        escapeCsv(price),
+        escapeCsv(finalPrice),
         escapeCsv(salePrice),
         escapeCsv(resolvedBrand),
         escapeCsv("new"),
