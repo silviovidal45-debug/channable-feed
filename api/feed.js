@@ -17,7 +17,7 @@ export default async function handler(req, res) {
         {
           headers: {
             "X-Auth-Token": accessToken,
-            Accept: "application/json",
+            "Accept": "application/json",
             "Content-Type": "application/json",
           },
         }
@@ -123,7 +123,12 @@ export default async function handler(req, res) {
     filtered.forEach((product) => {
       const customFieldMap = normalizeCustomFields(product.custom_fields);
 
-      const brand = product.brand_name || customFieldMap.brand || "";
+      const brand =
+        product.brand_name ||
+        product.brand ||
+        customFieldMap.brand ||
+        "";
+
       const gtin = customFieldMap.gtin || product.upc || "";
       const mpn = customFieldMap.mpn || product.sku || "";
       const googleProductCategory =
@@ -141,14 +146,16 @@ export default async function handler(req, res) {
             : "";
       } else {
         finalPrice =
-          product.price != null ? `${Number(product.price).toFixed(2)} EUR` : "";
+          product.price != null
+            ? `${Number(product.price).toFixed(2)} EUR`
+            : "";
         salePrice = "";
       }
 
       const row = [
         escapeCsv(product.id),
         escapeCsv(product.name || ""),
-        escapeCsv(stripHtml(product.description || "")),
+        escapeCsv(stripHtml(product.description || product.name || "")),
         escapeCsv(buildProductUrl(product)),
         escapeCsv(buildImageUrl(product)),
         escapeCsv(normalizeAvailability(product)),
