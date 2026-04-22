@@ -8,38 +8,72 @@ export default async function handler(req, res) {
   }
 
   try {
-    let page = 1;
-    let allProducts = [];
+    const headers = {
+      "X-Auth-Token": accessToken,
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+    };
 
-    while (true) {
-      const response = await fetch(
-        `https://api.bigcommerce.com/stores/${storeHash}/v3/catalog/products?limit=250&page=${page}&include=custom_fields,images`,
-        {
-          headers: {
-            "X-Auth-Token": accessToken,
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-          },
+    const fetchAllProducts = async () => {
+      let page = 1;
+      let allProducts = [];
+
+      while (true) {
+        const response = await fetch(
+          `https://api.bigcommerce.com/stores/${storeHash}/v3/catalog/products?limit=250&page=${page}&include=custom_fields,images`,
+          { headers }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Products API error: ${errorText}`);
         }
-      );
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        return res
-          .status(response.status)
-          .send(`BigCommerce API error: ${errorText}`);
+        const json = await response.json();
+        const products = json.data || [];
+        allProducts = allProducts.concat(products);
+
+        if (products.length < 250) break;
+        page++;
       }
 
-      const json = await response.json();
-      const products = json.data || [];
+      return allProducts;
+    };
 
-      allProducts = allProducts.concat(products);
+    const fetchAllBrands = async () => {
+      let page = 1;
+      let allBrands = [];
 
-      if (products.length < 250) {
-        break;
+      while (true) {
+        const response = await fetch(
+          `https://api.bigcommerce.com/stores/${storeHash}/v3/catalog/brands?limit=250&page=${page}`,
+          { headers }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Brands API error: ${errorText}`);
+        }
+
+        const json = await response.json();
+        const brands = json.data || [];
+        allBrands = allBrands.concat(brands);
+
+        if (brands.length < 250) break;
+        page++;
       }
 
-      page++;
+      return allBrands;
+    };
+
+    const [allProducts, allBrands] = await Promise.all([
+      fetchAllProducts(),
+      fetchAllBrands(),
+    ]);
+
+    const brandMap = {};
+    for (const brand of allBrands) {
+      brandMap[String(brand.id)] = brand.name || "";
     }
 
     const escapeCsv = (value) => {
@@ -123,9 +157,9 @@ export default async function handler(req, res) {
     filtered.forEach((product) => {
       const customFieldMap = normalizeCustomFields(product.custom_fields);
 
-      const brand =
+      const resolvedBrand =
         product.brand_name ||
-        product.brand ||
+        brandMap[String(product.brand_id || "")] ||
         customFieldMap.brand ||
         "";
 
@@ -161,7 +195,7 @@ export default async function handler(req, res) {
         escapeCsv(normalizeAvailability(product)),
         escapeCsv(finalPrice),
         escapeCsv(salePrice),
-        escapeCsv(brand),
+        escapeCsv(resolvedBrand),
         escapeCsv("new"),
         escapeCsv(gtin),
         escapeCsv(mpn),
