@@ -119,12 +119,24 @@ export default async function handler(req, res) {
         return "";
       }
 
-      const firstImage = product.images[0];
+      const images = [...product.images];
+
+      images.sort((a, b) => {
+        const aThumb = a.is_thumbnail ? 1 : 0;
+        const bThumb = b.is_thumbnail ? 1 : 0;
+        if (aThumb !== bThumb) return bThumb - aThumb;
+
+        const aSort = typeof a.sort_order === "number" ? a.sort_order : 9999;
+        const bSort = typeof b.sort_order === "number" ? b.sort_order : 9999;
+        return aSort - bSort;
+      });
+
+      const chosen = images[0];
 
       return (
-        firstImage?.url_standard ||
-        firstImage?.url_zoom ||
-        firstImage?.url_thumbnail ||
+        chosen?.url_standard ||
+        chosen?.url_zoom ||
+        chosen?.url_thumbnail ||
         ""
       );
     };
@@ -155,7 +167,7 @@ export default async function handler(req, res) {
         "mpn",
         "item_group_id",
         "google_product_category",
-        "product_type",
+        "product_type"
       ].join(","),
     ];
 
