@@ -17,7 +17,7 @@ export default async function handler(req, res) {
         {
           headers: {
             "X-Auth-Token": accessToken,
-            "Accept": "application/json",
+            Accept: "application/json",
             "Content-Type": "application/json",
           },
         }
@@ -35,7 +35,10 @@ export default async function handler(req, res) {
 
       allProducts = allProducts.concat(products);
 
-      if (products.length < 250) break;
+      if (products.length < 250) {
+        break;
+      }
+
       page++;
     }
 
@@ -126,12 +129,21 @@ export default async function handler(req, res) {
       const googleProductCategory =
         customFieldMap.google_product_category || "";
       const productType = customFieldMap.product_type || "";
-      const price =
-        product.price != null ? `${Number(product.price).toFixed(2)} EUR` : "";
-      const salePrice =
-        product.sale_price != null && Number(product.sale_price) > 0
-          ? `${Number(product.sale_price).toFixed(2)} EUR`
-          : "";
+
+      let finalPrice = "";
+      let salePrice = "";
+
+      if (product.sale_price != null && Number(product.sale_price) > 0) {
+        finalPrice = `${Number(product.sale_price).toFixed(2)} EUR`;
+        salePrice =
+          product.price != null
+            ? `${Number(product.price).toFixed(2)} EUR`
+            : "";
+      } else {
+        finalPrice =
+          product.price != null ? `${Number(product.price).toFixed(2)} EUR` : "";
+        salePrice = "";
+      }
 
       const row = [
         escapeCsv(product.id),
@@ -140,7 +152,7 @@ export default async function handler(req, res) {
         escapeCsv(buildProductUrl(product)),
         escapeCsv(buildImageUrl(product)),
         escapeCsv(normalizeAvailability(product)),
-        escapeCsv(price),
+        escapeCsv(finalPrice),
         escapeCsv(salePrice),
         escapeCsv(brand),
         escapeCsv("new"),
