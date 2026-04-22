@@ -31,6 +31,7 @@ export default async function handler(req, res) {
 
         const json = await response.json();
         const products = json.data || [];
+
         allProducts = allProducts.concat(products);
 
         if (products.length < 250) break;
@@ -57,6 +58,7 @@ export default async function handler(req, res) {
 
         const json = await response.json();
         const brands = json.data || [];
+
         allBrands = allBrands.concat(brands);
 
         if (brands.length < 250) break;
@@ -169,17 +171,17 @@ export default async function handler(req, res) {
         customFieldMap.google_product_category || "";
       const productType = customFieldMap.product_type || "";
 
-      let finalPrice = "";
+      let price = "";
       let salePrice = "";
 
       if (product.sale_price != null && Number(product.sale_price) > 0) {
-        finalPrice = `${Number(product.sale_price).toFixed(2)} EUR`;
-        salePrice =
+        price =
           product.price != null
             ? `${Number(product.price).toFixed(2)} EUR`
             : "";
+        salePrice = `${Number(product.sale_price).toFixed(2)} EUR`;
       } else {
-        finalPrice =
+        price =
           product.price != null
             ? `${Number(product.price).toFixed(2)} EUR`
             : "";
@@ -193,7 +195,7 @@ export default async function handler(req, res) {
         escapeCsv(buildProductUrl(product)),
         escapeCsv(buildImageUrl(product)),
         escapeCsv(normalizeAvailability(product)),
-        escapeCsv(finalPrice),
+        escapeCsv(price),
         escapeCsv(salePrice),
         escapeCsv(resolvedBrand),
         escapeCsv("new"),
