@@ -119,17 +119,12 @@ export default async function handler(req, res) {
         return "";
       }
 
-      // Bevorzuge bewusst das 2. Bild
-      const preferredImage =
-        product.images[1] ||
-        product.images.find((img) => img.url_zoom) ||
-        product.images.find((img) => img.url_standard) ||
-        product.images[0];
+      const firstImage = product.images[0];
 
       return (
-        preferredImage?.url_zoom ||
-        preferredImage?.url_standard ||
-        preferredImage?.url_thumbnail ||
+        firstImage?.url_standard ||
+        firstImage?.url_zoom ||
+        firstImage?.url_thumbnail ||
         ""
       );
     };
@@ -179,9 +174,6 @@ export default async function handler(req, res) {
         customFieldMap.google_product_category || "";
       const productType = customFieldMap.product_type || "";
 
-      // DEINE gewünschte Logik:
-      // Wenn sale_price existiert, dann kommt der reduzierte Preis ins Feld "price"
-      // und sale_price bleibt leer, damit Channable den aktuellen Preis sauber zeigt.
       let finalPrice = "";
       let salePrice = "";
 
